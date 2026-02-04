@@ -16,13 +16,10 @@ spec:
       serviceAccountName: email-operator
       containers:
       - name: manager
-        image: email-operator:v1.0.0
+        image: gatete/besend:v1.0.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
           name: metrics
         - containerPort: 8081
           name: health
-        env:
-        - name: KUBECONFIG
-          value: /home/nonroot/.kube/config
