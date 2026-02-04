@@ -16,7 +16,7 @@ spec:
       serviceAccountName: email-operator
       containers:
       - name: manager
-        image: gatete/besend:v1.0.0
+        image: bruno74t/besend:v1.0.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
