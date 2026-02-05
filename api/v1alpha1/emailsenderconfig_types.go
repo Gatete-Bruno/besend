@@ -10,6 +10,7 @@ type EmailSenderConfigSpec struct {
 	SenderEmail string `json:"senderEmail"`
 	FromName string `json:"fromName,omitempty"`
 	Domain string `json:"domain,omitempty"`
+	Port int `json:"port,omitempty"`
 	Timeout int `json:"timeout,omitempty"`
 	CustomerID string `json:"customerId,omitempty"`
 }

@@ -7,7 +7,8 @@ spec:
   names:
     kind: EmailSenderConfig
     plural: emailsenderconfigs
-    shortNames: [esc]
+    shortNames:
+    - esc
   scope: Namespaced
   versions:
   - name: v1alpha1
@@ -20,16 +21,39 @@ spec:
           spec:
             type: object
             properties:
-              provider: {type: string}
-              apiTokenSecretRef: {type: string}
-              senderEmail: {type: string}
-              domain: {type: string}
-              timeout: {type: integer}
+              provider:
+                type: string
+              senderEmail:
+                type: string
+              fromName:
+                type: string
+              domain:
+                type: string
+              port:
+                type: integer
+              timeout:
+                type: integer
+              apiTokenSecretRef:
+                type: string
+              customerId:
+                type: string
+            required:
+            - provider
+            - senderEmail
+            - apiTokenSecretRef
           status:
             type: object
             properties:
-              status: {type: string}
-              message: {type: string}
-              providerVerified: {type: boolean}
-    subresources:
-      status: {}
+              status:
+                type: string
+              message:
+                type: string
+              lastValidated:
+                type: string
+                format: date-time
+              lastError:
+                type: string
+              providerVerified:
+                type: boolean
+              observedGeneration:
+                type: integer

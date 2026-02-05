@@ -59,10 +59,16 @@ func (r *EmailReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	username := string(secret.Data["username"])
 	password := string(secret.Data["password"])
 
+	// Get port from config, default to 587 if not specified
+	port := config.Spec.Port
+	if port == 0 {
+		port = 587
+	}
+
 	emailProvider, err := provider.NewProvider(&provider.Config{
 		Provider:    config.Spec.Provider,
 		Host:        config.Spec.Domain,
-		Port:        587,
+		Port:        port,
 		Username:    username,
 		Password:    password,
 		Timeout:     config.Spec.Timeout,

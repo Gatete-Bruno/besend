@@ -75,15 +75,20 @@ func (p *NativeSMTPProvider) Send(ctx context.Context, req *EmailRequest) (*Emai
 	if err != nil {
 		return nil, fmt.Errorf("data failed: %w", err)
 	}
-	defer wc.Close()
 
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s", req.From, req.To, req.Subject, req.Body)
 	if _, err := wc.Write([]byte(msg)); err != nil {
+		wc.Close()
 		return nil, fmt.Errorf("write failed: %w", err)
 	}
 
-	if err := client.Quit(); err != nil {
-		return nil, fmt.Errorf("quit failed: %w", err)
+	if err := wc.Close(); err != nil {
+		return nil, fmt.Errorf("close failed: %w", err)
+	}
+
+	// Don't call Quit() if localhost to avoid connection issues
+	if p.host != "localhost" && p.host != "127.0.0.1" {
+		_ = client.Quit()
 	}
 
 	return &EmailResponse{MessageID: req.MessageID, Status: "Sent"}, nil

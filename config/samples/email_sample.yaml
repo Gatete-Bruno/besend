@@ -1,0 +1,10 @@
+apiVersion: email.example.com/v1alpha1
+kind: Email
+metadata:
+  name: sample-email
+  namespace: email-system
+spec:
+  senderConfigRef: mailhog-config
+  recipientEmail: recipient@example.com
+  subject: "Test Email from Email Operator"
+  body: "This is a test email sent from the Email Operator running locally!"

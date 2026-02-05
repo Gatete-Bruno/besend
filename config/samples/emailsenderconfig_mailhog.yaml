@@ -1,0 +1,12 @@
+apiVersion: email.example.com/v1alpha1
+kind: EmailSenderConfig
+metadata:
+  name: mailhog-config
+  namespace: email-system
+spec:
+  provider: native-smtp
+  senderEmail: test@example.com
+  domain: localhost
+  port: 1025
+  apiTokenSecretRef: smtp-credentials
+  timeout: 30

@@ -1,0 +1,13 @@
+apiVersion: email.example.com/v1alpha1
+kind: EmailSenderConfig
+metadata:
+  name: gmail-config
+  namespace: email-system
+spec:
+  provider: native-smtp
+  senderEmail: your-email@gmail.com
+  fromName: "Your App Name"
+  domain: smtp.gmail.com
+  port: 587
+  apiTokenSecretRef: gmail-credentials
+  timeout: 30
