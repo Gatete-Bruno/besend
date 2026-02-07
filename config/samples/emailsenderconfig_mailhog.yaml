@@ -5,8 +5,9 @@ metadata:
   namespace: email-system
 spec:
   provider: native-smtp
-  senderEmail: test@example.com
-  domain: localhost
+  apiTokenSecretRef: "mailhog-secret"
+  senderEmail: "noreply@besend.io"
+  fromName: "Besend Notifications"
+  domain: "mailhog.email-system.svc.cluster.local"
   port: 1025
-  apiTokenSecretRef: smtp-credentials
   timeout: 30

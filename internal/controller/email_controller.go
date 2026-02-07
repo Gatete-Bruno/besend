@@ -11,8 +11,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	corev1 "k8s.io/api/core/v1"
-	emailv1alpha1 "github.com/bruno/email-operator/api/v1alpha1"
-	"github.com/bruno/email-operator/internal/provider"
+	emailv1alpha1 "besend/api/v1alpha1"
+	"besend/internal/provider"
 )
 
 type EmailReconciler struct {

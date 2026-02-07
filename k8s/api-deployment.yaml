@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: besend-api
+  namespace: besend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: besend-api
+  namespace: besend
+  labels:
+    app: besend-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: besend-api
+  template:
+    metadata:
+      labels:
+        app: besend-api
+    spec:
+      serviceAccountName: besend-api
+      containers:
+      - name: api
+        image: bruno74t/besend-api:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: DATABASE_HOST
+          value: "postgres-service.besend.svc.cluster.local"
+        - name: DATABASE_PORT
+          value: "5432"
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: besend-postgres
+              key: username
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: besend-postgres
+              key: password
+        - name: DATABASE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: besend-postgres
+              key: database
+        - name: API_PORT
+          value: "8080"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: besend-api
+  namespace: besend
+spec:
+  selector:
+    app: besend-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+  type: LoadBalancer

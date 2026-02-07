@@ -1,0 +1,53 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Component to rollback'
+        required: true
+        type: choice
+        options:
+          - operator
+          - api
+          - both
+      revision:
+        description: 'Revision number to rollback to (0 for previous)'
+        required: false
+        default: '0'
+
+jobs:
+  rollback:
+    name: Rollback ${{ inputs.component }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Rollback operator
+        if: inputs.component == 'operator' || inputs.component == 'both'
+        run: |
+          echo "Rolling back operator..."
+          kubectl rollout undo deployment/besend-operator -n besend --to-revision=${{ inputs.revision }}
+          kubectl rollout status deployment/besend-operator -n besend
+
+      - name: Rollback API
+        if: inputs.component == 'api' || inputs.component == 'both'
+        run: |
+          echo "Rolling back API..."
+          kubectl rollout undo deployment/besend-api -n besend --to-revision=${{ inputs.revision }}
+          kubectl rollout status deployment/besend-api -n besend
+
+      - name: Verify rollback
+        run: |
+          echo "=== Current State ==="
+          kubectl get pods -n besend
+          kubectl get deployments -n besend

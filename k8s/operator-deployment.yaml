@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: besend-operator
+  namespace: besend
+  labels:
+    app: besend-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: besend-operator
+  template:
+    metadata:
+      labels:
+        app: besend-operator
+    spec:
+      serviceAccountName: besend-operator
+      containers:
+      - name: operator
+        image: bruno74t/besend-operator:latest
+        imagePullPolicy: Always
+        args:
+        - --leader-elect
+        ports:
+        - containerPort: 8081
+          name: metrics
+        - containerPort: 8082
+          name: health
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8082
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8082
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true

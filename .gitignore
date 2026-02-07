@@ -1,0 +1,32 @@
+# Binaries
+bin/
+testbin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test coverage
+*.out
+coverage.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+
+# Kubernetes
+config/samples/*.yaml.bak
+
+# Local env
+.env
+.env.local
+
+# Docker Compose
+docker-compose.yml
