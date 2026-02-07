@@ -3,71 +3,66 @@ package main
 import (
     "log"
     "os"
+    "strconv"
 
     "github.com/gin-gonic/gin"
     "github.com/Gatete-Bruno/besend/pkg/database"
-    "github.com/Gatete-Bruno/besend/pkg/handlers"
-    "github.com/Gatete-Bruno/besend/pkg/middleware"
+    "github.com/Gatete-Bruno/besend/pkg/api/handlers"
+    "github.com/Gatete-Bruno/besend/pkg/api/middleware"
 )
 
 func main() {
-    // Database connection
     dbHost := getEnv("DATABASE_HOST", "localhost")
-    dbPort := getEnv("DATABASE_PORT", "5432")
+    dbPortStr := getEnv("DATABASE_PORT", "5432")
+    dbPort, _ := strconv.Atoi(dbPortStr)
     dbUser := getEnv("DATABASE_USER", "besend")
     dbPassword := getEnv("DATABASE_PASSWORD", "besend")
     dbName := getEnv("DATABASE_NAME", "besend")
+    sslMode := getEnv("SSL_MODE", "disable")
 
-    db, err := database.Connect(dbHost, dbPort, dbUser, dbPassword, dbName)
-    if err != nil {
+    dbConfig := database.Config{
+        Host:     dbHost,
+        Port:     dbPort,
+        User:     dbUser,
+        Password: dbPassword,
+        DBName:   dbName,
+        SSLMode:  sslMode,
+    }
+
+    if err := database.Connect(dbConfig); err != nil {
         log.Fatalf("Failed to connect to database: %v", err)
     }
+    defer database.Close()
 
-    // Run migrations
-    if err := database.Migrate(db); err != nil {
-        log.Fatalf("Failed to run migrations: %v", err)
+    if err := database.InitSchema(); err != nil {
+        log.Fatalf("Failed to initialize schema: %v", err)
     }
 
-    // Initialize router
     r := gin.Default()
 
-    // Health check endpoint
     r.GET("/health", func(c *gin.Context) {
         c.JSON(200, gin.H{"status": "healthy"})
     })
 
-    // API v1 routes
-    v1 := r.Group("/api/v1")
+    api := r.Group("/api/v1")
     {
-        // Public routes
-        customers := v1.Group("/customers")
+        api.POST("/customers", handlers.RegisterCustomer)
+
+        protected := api.Group("")
+        protected.Use(middleware.AuthMiddleware())
         {
-            customers.POST("", handlers.CreateCustomer(db))
-            customers.GET("/:id", handlers.GetCustomer(db))
-        }
+            protected.GET("/me", handlers.GetCustomerInfo)
+            
+            protected.POST("/smtp", handlers.CreateSMTPConfig)
+            protected.GET("/smtp", handlers.GetSMTPConfigs)
+            protected.DELETE("/smtp/:id", handlers.DeleteSMTPConfig)
 
-        // Protected routes (require API key)
-        protected := v1.Group("")
-        protected.Use(middleware.AuthMiddleware(db))
-        {
-            // SMTP Configuration
-            protected.POST("/smtp", handlers.CreateSMTPConfig(db))
-            protected.GET("/smtp", handlers.GetSMTPConfigs(db))
-            protected.PUT("/smtp/:id", handlers.UpdateSMTPConfig(db))
-            protected.DELETE("/smtp/:id", handlers.DeleteSMTPConfig(db))
-
-            // Email Sending
-            protected.POST("/emails/send", handlers.SendEmail(db))
-            protected.GET("/emails", handlers.GetEmails(db))
-            protected.GET("/emails/:id", handlers.GetEmailByID(db))
-
-            // Customer Info
-            protected.GET("/me", handlers.GetCurrentCustomer(db))
-            protected.GET("/usage", handlers.GetUsage(db))
+            protected.POST("/emails/send", handlers.SendEmail)
+            protected.GET("/emails", handlers.GetEmailHistory)
+            protected.GET("/emails/stats", handlers.GetEmailStats)
         }
     }
 
-    // Start server
     port := getEnv("API_PORT", "8080")
     log.Printf("API Server starting on port %s", port)
     if err := r.Run(":" + port); err != nil {

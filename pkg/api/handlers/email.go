@@ -10,7 +10,7 @@ import (
         "strconv"
         "time"
 
-        "besend/pkg/database"
+        "github.com/Gatete-Bruno/besend/pkg/database"
 
         "github.com/gin-gonic/gin"
 )

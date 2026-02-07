@@ -1,4 +1,4 @@
-module besend
+module github.com/Gatete-Bruno/besend
 
 go 1.21
 

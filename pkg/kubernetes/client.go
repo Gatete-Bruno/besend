@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	emailv1alpha1 "besend/api/v1alpha1"
+	emailv1alpha1 "github.com/Gatete-Bruno/besend/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"

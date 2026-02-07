@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"besend/pkg/database"
+	"github.com/Gatete-Bruno/besend/pkg/database"
 
 	"github.com/gin-gonic/gin"
 )
