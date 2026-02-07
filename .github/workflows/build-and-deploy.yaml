@@ -4,13 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'cmd/**'
-      - 'pkg/**'
-      - 'api/**'
-      - 'internal/**'
-      - 'Dockerfile.*'
-      - 'k8s/**'
   workflow_dispatch:
 
 env:
@@ -92,5 +85,3 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=registry,ref=${{ env.API_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.API_IMAGE }}:buildcache,mode=max
-
-  
