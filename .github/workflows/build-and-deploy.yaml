@@ -92,3 +92,62 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=registry,ref=${{ env.API_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.API_IMAGE }}:buildcache,mode=max
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: [build-operator, build-api]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Get short SHA
+        id: vars
+        run: echo "SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Update image tags in manifests
+        run: |
+          sed -i "s|image: bruno74t/besend-operator:.*|image: bruno74t/besend-operator:${{ steps.vars.outputs.SHORT_SHA }}|g" k8s/operator-deployment.yaml
+          sed -i "s|image: bruno74t/besend-api:.*|image: bruno74t/besend-api:${{ steps.vars.outputs.SHORT_SHA }}|g" k8s/api-deployment.yaml
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl get secret besend-postgres -n besend || kubectl apply -f k8s/postgres-secret.yaml
+          kubectl apply -f k8s/postgres-statefulset.yaml
+          kubectl wait --for=condition=ready pod -l app=postgres -n besend --timeout=300s || true
+          kubectl apply -f k8s/operator-rbac.yaml
+          kubectl apply -f k8s/operator-deployment.yaml
+          kubectl apply -f k8s/api-deployment.yaml
+          kubectl rollout restart deployment/besend-operator -n besend
+          kubectl rollout restart deployment/besend-api -n besend
+          kubectl rollout status deployment/besend-operator -n besend --timeout=300s
+          kubectl rollout status deployment/besend-api -n besend --timeout=300s
+
+      - name: Verify deployment
+        run: |
+          echo "=== Pods Status ==="
+          kubectl get pods -n besend
+          echo "=== Services ==="
+          kubectl get svc -n besend
+          echo "=== Operator Logs (last 20 lines) ==="
+          kubectl logs -n besend -l app=besend-operator --tail=20 || true
+          echo "=== API Logs (last 20 lines) ==="
+          kubectl logs -n besend -l app=besend-api --tail=20 || true
+
+      - name: Get LoadBalancer IP
+        run: |
+          echo "=== API Endpoint ==="
+          kubectl get svc besend-api -n besend -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+          echo ""
