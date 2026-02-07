@@ -1,4 +1,4 @@
-name: Build Docker Images
+name: Build and Deploy Besend
 
 on:
   push:
@@ -10,6 +10,7 @@ on:
       - 'api/**'
       - 'internal/**'
       - 'Dockerfile.*'
+      - 'k8s/**'
   workflow_dispatch:
 
 env:
@@ -21,6 +22,8 @@ jobs:
   build-operator:
     name: Build Operator Image
     runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -50,10 +53,14 @@ jobs:
           file: ./Dockerfile.operator
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=registry,ref=${{ env.OPERATOR_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.OPERATOR_IMAGE }}:buildcache,mode=max
 
   build-api:
     name: Build API Image
     runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -83,3 +90,5 @@ jobs:
           file: ./Dockerfile.api
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=registry,ref=${{ env.API_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.API_IMAGE }}:buildcache,mode=max
