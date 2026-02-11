@@ -115,7 +115,7 @@ func SendEmail(c *gin.Context) {
 		return
 	}
 
-	smtpConfig, err := database.GetSMTPConfigByID(customer.ID, req.SMTPConfigID)
+	_, err := database.GetSMTPConfigByID(customer.ID, req.SMTPConfigID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "SMTP config not found"})
 		return
