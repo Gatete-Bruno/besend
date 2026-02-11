@@ -1,42 +1,12 @@
 package handlers
 
 import (
-	"context"
-	"fmt"
 	"net/http"
 	"strconv"
-	"sync"
 
 	"github.com/Gatete-Bruno/besend/pkg/database"
 	"github.com/gin-gonic/gin"
-	emailv1alpha1 "github.com/Gatete-Bruno/besend/api/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
-
-var (
-	k8sClient client.Client
-	k8sOnce   sync.Once
-	k8sErr    error
-)
-
-func getK8sClient() (client.Client, error) {
-	k8sOnce.Do(func() {
-		cfg, err := config.GetConfig()
-		if err != nil {
-			k8sErr = err
-			return
-		}
-
-		scheme.AddToScheme(scheme.Scheme)
-		emailv1alpha1.AddToScheme(scheme.Scheme)
-
-		k8sClient, k8sErr = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	})
-	return k8sClient, k8sErr
-}
 
 func RegisterCustomer(c *gin.Context) {
 	var req struct {
@@ -157,66 +127,22 @@ func SendEmail(c *gin.Context) {
 		return
 	}
 
-	// Get k8s client lazily
-	k8sClient, err := getK8sClient()
-	if err != nil {
-		database.UpdateEmailStatus(email.ID, "failed", stringPtr(fmt.Sprintf("k8s unavailable: %v", err)))
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Email service temporarily unavailable"})
-		return
-	}
-
-	// Create EmailSenderConfig in Kubernetes if it doesn't exist
-	configName := fmt.Sprintf("config-%d-%d", customer.ID, req.SMTPConfigID)
-	emailSenderConfig := &emailv1alpha1.EmailSenderConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      configName,
-			Namespace: "besend",
-		},
-		Spec: emailv1alpha1.EmailSenderConfigSpec{
-			Provider:          "native-smtp",
-			SenderEmail:       smtpConfig.FromEmail,
-			Domain:            smtpConfig.SMTPHost,
-			Port:              smtpConfig.SMTPPort,
-			APITokenSecretRef: "mailhog-smtp",
-		},
-	}
-
-	ctx := context.Background()
-	if err := k8sClient.Create(ctx, emailSenderConfig); err != nil {
-		// Config might already exist, that's fine
-	}
-
-	// Create Email CRD for the operator to process
-	emailCRD := &emailv1alpha1.Email{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("email-%d", email.ID),
-			Namespace: "besend",
-		},
-		Spec: emailv1alpha1.EmailSpec{
-			SenderConfigRef: configName,
-			RecipientEmail:  req.To,
-			Subject:         req.Subject,
-			Body:            req.Body,
-		},
-	}
-
-	if err := k8sClient.Create(ctx, emailCRD); err != nil {
-		database.UpdateEmailStatus(email.ID, "failed", stringPtr(fmt.Sprintf("failed to create k8s resource: %v", err)))
+	// Queue email for async delivery
+	if err := database.UpdateEmailStatus(email.ID, "queued", nil); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to queue email"})
 		return
 	}
 
-	// Increment quota
+	// Increment quota immediately
 	if err := customer.IncrementEmailCount(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update quota"})
 		return
 	}
 
 	c.JSON(http.StatusAccepted, gin.H{
-		"message":     "Email queued for delivery",
-		"email_id":    email.ID,
-		"k8s_resource": fmt.Sprintf("email-%d", email.ID),
-		"status":      "pending",
+		"message":   "Email queued for delivery",
+		"email_id":  email.ID,
+		"status":    "queued",
 	})
 }
 
@@ -245,8 +171,4 @@ func GetEmailStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, stats)
-}
-
-func stringPtr(s string) *string {
-	return &s
 }
