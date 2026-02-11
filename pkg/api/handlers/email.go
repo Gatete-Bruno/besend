@@ -1,265 +1,238 @@
 package handlers
 
 import (
-        "context"
-        "crypto/tls"
-        "fmt"
-        "net"
-        "net/smtp"
-        "net/http"
-        "strconv"
-        "time"
+	"context"
+	"fmt"
+	"net/http"
+	"strconv"
 
-        "github.com/Gatete-Bruno/besend/pkg/database"
-
-        "github.com/gin-gonic/gin"
+	"github.com/Gatete-Bruno/besend/pkg/database"
+	"github.com/gin-gonic/gin"
+	emailv1alpha1 "github.com/Gatete-Bruno/besend/api/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
+var k8sClient client.Client
+
+func init() {
+	cfg, err := config.GetConfig()
+	if err != nil {
+		panic(err)
+	}
+
+	scheme.AddToScheme(scheme.Scheme)
+	emailv1alpha1.AddToScheme(scheme.Scheme)
+
+	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	if err != nil {
+		panic(err)
+	}
+}
+
 func RegisterCustomer(c *gin.Context) {
-        var req struct {
-                Email string `json:"email" binding:"required,email"`
-                Plan  string `json:"plan"`
-        }
+	var req struct {
+		Email string `json:"email" binding:"required,email"`
+		Plan  string `json:"plan"`
+	}
 
-        if err := c.ShouldBindJSON(&req); err != nil {
-                c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-                return
-        }
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-        if req.Plan == "" {
-                req.Plan = "starter"
-        }
+	if req.Plan == "" {
+		req.Plan = "starter"
+	}
 
-        customer, err := database.CreateCustomer(req.Email, req.Plan)
-        if err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create customer"})
-                return
-        }
+	customer, err := database.CreateCustomer(req.Email, req.Plan)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create customer"})
+		return
+	}
 
-        c.JSON(http.StatusCreated, customer)
+	c.JSON(http.StatusCreated, customer)
 }
 
 func GetCustomerInfo(c *gin.Context) {
-        customer := c.MustGet("customer").(*database.Customer)
-        c.JSON(http.StatusOK, customer)
+	customer := c.MustGet("customer").(*database.Customer)
+	c.JSON(http.StatusOK, customer)
 }
 
 func CreateSMTPConfig(c *gin.Context) {
-        customer := c.MustGet("customer").(*database.Customer)
+	customer := c.MustGet("customer").(*database.Customer)
 
-        var req struct {
-                Name      string `json:"name" binding:"required"`
-                SMTPHost  string `json:"smtp_host" binding:"required"`
-                SMTPPort  int    `json:"smtp_port" binding:"required"`
-                Username  string `json:"username"`
-                Password  string `json:"password"`
-                FromEmail string `json:"from_email" binding:"required,email"`
-        }
+	var req struct {
+		Name      string `json:"name" binding:"required"`
+		SMTPHost  string `json:"smtp_host" binding:"required"`
+		SMTPPort  int    `json:"smtp_port" binding:"required"`
+		Username  string `json:"username"`
+		Password  string `json:"password"`
+		FromEmail string `json:"from_email" binding:"required,email"`
+	}
 
-        if err := c.ShouldBindJSON(&req); err != nil {
-                c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-                return
-        }
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-        config, err := database.CreateSMTPConfig(
-                customer.ID, req.Name, req.SMTPHost, req.SMTPPort,
-                req.Username, req.Password, req.FromEmail,
-        )
+	config, err := database.CreateSMTPConfig(
+		customer.ID, req.Name, req.SMTPHost, req.SMTPPort,
+		req.Username, req.Password, req.FromEmail,
+	)
 
-        if err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create SMTP config"})
-                return
-        }
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create SMTP config"})
+		return
+	}
 
-        c.JSON(http.StatusCreated, config)
+	c.JSON(http.StatusCreated, config)
 }
 
 func GetSMTPConfigs(c *gin.Context) {
-        customer := c.MustGet("customer").(*database.Customer)
+	customer := c.MustGet("customer").(*database.Customer)
 
-        configs, err := database.GetSMTPConfigsByCustomer(customer.ID)
-        if err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch configs"})
-                return
-        }
+	configs, err := database.GetSMTPConfigsByCustomer(customer.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch configs"})
+		return
+	}
 
-        c.JSON(http.StatusOK, configs)
+	c.JSON(http.StatusOK, configs)
 }
 
 func DeleteSMTPConfig(c *gin.Context) {
-        customer := c.MustGet("customer").(*database.Customer)
-        configID, err := strconv.Atoi(c.Param("id"))
-        if err != nil {
-                c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid config ID"})
-                return
-        }
+	customer := c.MustGet("customer").(*database.Customer)
+	configID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid config ID"})
+		return
+	}
 
-        if err := database.DeleteSMTPConfig(customer.ID, configID); err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete config"})
-                return
-        }
+	if err := database.DeleteSMTPConfig(customer.ID, configID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete config"})
+		return
+	}
 
-        c.JSON(http.StatusOK, gin.H{"message": "Config deleted"})
+	c.JSON(http.StatusOK, gin.H{"message": "Config deleted"})
 }
 
 func SendEmail(c *gin.Context) {
-        customer := c.MustGet("customer").(*database.Customer)
+	customer := c.MustGet("customer").(*database.Customer)
 
-        var req struct {
-                SMTPConfigID int    `json:"smtp_config_id" binding:"required"`
-                To           string `json:"to" binding:"required,email"`
-                Subject      string `json:"subject" binding:"required"`
-                Body         string `json:"body" binding:"required"`
-        }
+	var req struct {
+		SMTPConfigID int    `json:"smtp_config_id" binding:"required"`
+		To           string `json:"to" binding:"required,email"`
+		Subject      string `json:"subject" binding:"required"`
+		Body         string `json:"body" binding:"required"`
+	}
 
-        if err := c.ShouldBindJSON(&req); err != nil {
-                c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-                return
-        }
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-        if !customer.HasQuotaAvailable() {
-                c.JSON(http.StatusForbidden, gin.H{"error": "Monthly quota exceeded"})
-                return
-        }
+	if !customer.HasQuotaAvailable() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Monthly quota exceeded"})
+		return
+	}
 
-        smtpConfig, err := database.GetSMTPConfigByID(customer.ID, req.SMTPConfigID)
-        if err != nil {
-                c.JSON(http.StatusNotFound, gin.H{"error": "SMTP config not found"})
-                return
-        }
+	smtpConfig, err := database.GetSMTPConfigByID(customer.ID, req.SMTPConfigID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "SMTP config not found"})
+		return
+	}
 
-        email, err := database.CreateEmail(customer.ID, &req.SMTPConfigID, req.To, req.Subject, req.Body)
-        if err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create email"})
-                return
-        }
+	email, err := database.CreateEmail(customer.ID, &req.SMTPConfigID, req.To, req.Subject, req.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create email"})
+		return
+	}
 
-        ctx := context.Background()
-        timeout := 30 * time.Second
-        addr := fmt.Sprintf("%s:%d", smtpConfig.SMTPHost, smtpConfig.SMTPPort)
+	// Create EmailSenderConfig in Kubernetes if it doesn't exist
+	configName := fmt.Sprintf("config-%d-%d", customer.ID, req.SMTPConfigID)
+	emailSenderConfig := &emailv1alpha1.EmailSenderConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configName,
+			Namespace: "besend",
+		},
+		Spec: emailv1alpha1.EmailSenderConfigSpec{
+			Provider:          "native-smtp",
+			SenderEmail:       smtpConfig.FromEmail,
+			Domain:            smtpConfig.SMTPHost,
+			Port:              smtpConfig.SMTPPort,
+			APITokenSecretRef: "mailhog-smtp",
+		},
+	}
 
-        conn, err := net.DialTimeout("tcp", addr, timeout)
-        if err != nil {
-                errorMsg := fmt.Sprintf("dial failed: %v", err)
-                database.UpdateEmailStatus(email.ID, "failed", &errorMsg)
-                c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
-                return
-        }
-        defer conn.Close()
+	ctx := context.Background()
+	if err := k8sClient.Create(ctx, emailSenderConfig); err != nil {
+		// Config might already exist, that's fine
+	}
 
-        client, err := smtp.NewClient(conn, smtpConfig.SMTPHost)
-        if err != nil {
-                errorMsg := fmt.Sprintf("smtp client failed: %v", err)
-                database.UpdateEmailStatus(email.ID, "failed", &errorMsg)
-                c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
-                return
-        }
-        defer client.Close()
+	// Create Email CRD for the operator to process
+	emailCRD := &emailv1alpha1.Email{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("email-%d", email.ID),
+			Namespace: "besend",
+		},
+		Spec: emailv1alpha1.EmailSpec{
+			SenderConfigRef: configName,
+			RecipientEmail:  req.To,
+			Subject:         req.Subject,
+			Body:            req.Body,
+		},
+	}
 
-        if ok, _ := client.Extension("STARTTLS"); ok {
-                tlsConfig := &tls.Config{ServerName: smtpConfig.SMTPHost}
-                if err := client.StartTLS(tlsConfig); err != nil {
-                        errorMsg := fmt.Sprintf("starttls failed: %v", err)
-                        database.UpdateEmailStatus(email.ID, "failed", &errorMsg)
-                        c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
-                        return
-                }
-        }
+	if err := k8sClient.Create(ctx, emailCRD); err != nil {
+		database.UpdateEmailStatus(email.ID, "failed", stringPtr(fmt.Sprintf("failed to create k8s resource: %v", err)))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to queue email"})
+		return
+	}
 
-        if smtpConfig.Username != "" {
-                auth := smtp.PlainAuth("", smtpConfig.Username, smtpConfig.Password, smtpConfig.SMTPHost)
-                if err := client.Auth(auth); err != nil {
-                        errorMsg := fmt.Sprintf("auth failed: %v", err)
-                        database.UpdateEmailStatus(email.ID, "failed", &errorMsg)
-                        c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
-                        return
-                }
-        }
+	// Increment quota
+	if err := customer.IncrementEmailCount(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update quota"})
+		return
+	}
 
-        if err := client.Mail(smtpConfig.FromEmail); err != nil {
-                errorMsg := fmt.Sprintf("mail from failed: %v", err)
-                database.UpdateEmailStatus(email.ID, "failed", &errorMsg)
-                c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
-                return
-        }
-
-        if err := client.Rcpt(req.To); err != nil {
-                errorMsg := fmt.Sprintf("rcpt to failed: %v", err)
-                database.UpdateEmailStatus(email.ID, "failed", &errorMsg)
-                c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
-                return
-        }
-
-        wc, err := client.Data()
-        if err != nil {
-                errorMsg := fmt.Sprintf("data failed: %v", err)
-                database.UpdateEmailStatus(email.ID, "failed", &errorMsg)
-                c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
-                return
-        }
-
-        msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s", smtpConfig.FromEmail, req.To, req.Subject, req.Body)
-        if _, err := wc.Write([]byte(msg)); err != nil {
-                wc.Close()
-                errorMsg := fmt.Sprintf("write failed: %v", err)
-                database.UpdateEmailStatus(email.ID, "failed", &errorMsg)
-                c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
-                return
-        }
-
-        if err := wc.Close(); err != nil {
-                errorMsg := fmt.Sprintf("close failed: %v", err)
-                database.UpdateEmailStatus(email.ID, "failed", &errorMsg)
-                c.JSON(http.StatusInternalServerError, gin.H{"error": errorMsg})
-                return
-        }
-
-        if smtpConfig.SMTPHost != "localhost" && smtpConfig.SMTPHost != "127.0.0.1" {
-                _ = client.Quit()
-        }
-
-        if err := database.UpdateEmailStatus(email.ID, "sent", nil); err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update status"})
-                return
-        }
-
-        if err := customer.IncrementEmailCount(); err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update quota"})
-                return
-        }
-
-        _ = ctx
-
-        c.JSON(http.StatusOK, gin.H{
-                "message":     "Email sent successfully",
-                "email_id":    email.ID,
-                "smtp_config": smtpConfig.Name,
-        })
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":     "Email queued for delivery",
+		"email_id":    email.ID,
+		"k8s_resource": fmt.Sprintf("email-%d", email.ID),
+		"status":      "pending",
+	})
 }
 
 func GetEmailHistory(c *gin.Context) {
-        customer := c.MustGet("customer").(*database.Customer)
+	customer := c.MustGet("customer").(*database.Customer)
 
-        limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
-        offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-        emails, err := database.GetEmailsByCustomer(customer.ID, limit, offset)
-        if err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch emails"})
-                return
-        }
+	emails, err := database.GetEmailsByCustomer(customer.ID, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch emails"})
+		return
+	}
 
-        c.JSON(http.StatusOK, emails)
+	c.JSON(http.StatusOK, emails)
 }
 
 func GetEmailStats(c *gin.Context) {
-        customer := c.MustGet("customer").(*database.Customer)
+	customer := c.MustGet("customer").(*database.Customer)
 
-        stats, err := database.GetEmailStats(customer.ID)
-        if err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch stats"})
-                return
-        }
+	stats, err := database.GetEmailStats(customer.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch stats"})
+		return
+	}
 
-        c.JSON(http.StatusOK, stats)
+	c.JSON(http.StatusOK, stats)
+}
+
+func stringPtr(s string) *string {
+	return &s
 }
