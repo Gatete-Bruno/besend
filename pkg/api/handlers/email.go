@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/Gatete-Bruno/besend/pkg/database"
 	"github.com/gin-gonic/gin"
@@ -15,21 +16,26 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
-var k8sClient client.Client
+var (
+	k8sClient client.Client
+	k8sOnce   sync.Once
+	k8sErr    error
+)
 
-func init() {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		panic(err)
-	}
+func getK8sClient() (client.Client, error) {
+	k8sOnce.Do(func() {
+		cfg, err := config.GetConfig()
+		if err != nil {
+			k8sErr = err
+			return
+		}
 
-	scheme.AddToScheme(scheme.Scheme)
-	emailv1alpha1.AddToScheme(scheme.Scheme)
+		scheme.AddToScheme(scheme.Scheme)
+		emailv1alpha1.AddToScheme(scheme.Scheme)
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	if err != nil {
-		panic(err)
-	}
+		k8sClient, k8sErr = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	})
+	return k8sClient, k8sErr
 }
 
 func RegisterCustomer(c *gin.Context) {
@@ -148,6 +154,14 @@ func SendEmail(c *gin.Context) {
 	email, err := database.CreateEmail(customer.ID, &req.SMTPConfigID, req.To, req.Subject, req.Body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create email"})
+		return
+	}
+
+	// Get k8s client lazily
+	k8sClient, err := getK8sClient()
+	if err != nil {
+		database.UpdateEmailStatus(email.ID, "failed", stringPtr(fmt.Sprintf("k8s unavailable: %v", err)))
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Email service temporarily unavailable"})
 		return
 	}
 
