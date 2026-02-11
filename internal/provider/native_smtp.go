@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"net/smtp"
@@ -36,7 +35,6 @@ func NewNativeSMTPProvider(cfg *Config) (Provider, error) {
 
 func (p *NativeSMTPProvider) Send(ctx context.Context, req *EmailRequest) (*EmailResponse, error) {
 	addr := fmt.Sprintf("%s:%d", p.host, p.port)
-	
 	conn, err := net.DialTimeout("tcp", addr, p.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("dial failed: %w", err)
@@ -48,20 +46,6 @@ func (p *NativeSMTPProvider) Send(ctx context.Context, req *EmailRequest) (*Emai
 		return nil, fmt.Errorf("smtp client failed: %w", err)
 	}
 	defer client.Close()
-
-	if ok, _ := client.Extension("STARTTLS"); ok {
-		tlsConfig := &tls.Config{ServerName: p.host}
-		if err := client.StartTLS(tlsConfig); err != nil {
-			return nil, fmt.Errorf("starttls failed: %w", err)
-		}
-	}
-
-	if p.username != "" {
-		auth := smtp.PlainAuth("", p.username, p.password, p.host)
-		if err := client.Auth(auth); err != nil {
-			return nil, fmt.Errorf("auth failed: %w", err)
-		}
-	}
 
 	if err := client.Mail(req.From); err != nil {
 		return nil, fmt.Errorf("mail from failed: %w", err)
@@ -86,10 +70,7 @@ func (p *NativeSMTPProvider) Send(ctx context.Context, req *EmailRequest) (*Emai
 		return nil, fmt.Errorf("close failed: %w", err)
 	}
 
-	// Don't call Quit() if localhost to avoid connection issues
-	if p.host != "localhost" && p.host != "127.0.0.1" {
-		_ = client.Quit()
-	}
+	_ = client.Quit()
 
 	return &EmailResponse{MessageID: req.MessageID, Status: "Sent"}, nil
 }

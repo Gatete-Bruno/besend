@@ -51,6 +51,7 @@ spec:
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data
+          subPath: postgres
         resources:
           requests:
             memory: "256Mi"
@@ -63,6 +64,7 @@ spec:
       name: postgres-storage
     spec:
       accessModes: ["ReadWriteOnce"]
+      storageClassName: longhorn
       resources:
         requests:
           storage: 10Gi
