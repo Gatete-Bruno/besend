@@ -2,3 +2,18 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: besend
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smtp
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storage

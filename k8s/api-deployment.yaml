@@ -35,38 +35,17 @@ spec:
         - name: DATABASE_PORT
           value: "5432"
         - name: DATABASE_USER
-          valueFrom:
-            secretKeyRef:
-              name: besend-postgres
-              key: username
+          value: besend
         - name: DATABASE_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: besend-postgres
-              key: password
+          value: besend123
         - name: DATABASE_NAME
-          valueFrom:
-            secretKeyRef:
-              name: besend-postgres
-              key: database
+          value: besend
         - name: SMTP_HOST
           value: "mailhog.smtp.svc.cluster.local"
         - name: SMTP_PORT
           value: "1025"
         - name: API_PORT
           value: "8080"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 10
         resources:
           requests:
             cpu: 100m
