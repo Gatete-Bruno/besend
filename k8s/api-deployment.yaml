@@ -12,7 +12,7 @@ metadata:
   labels:
     app: besend-api
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: besend-api
@@ -31,7 +31,7 @@ spec:
           name: http
         env:
         - name: DATABASE_HOST
-          value: "postgres-service.besend.svc.cluster.local"
+          value: "postgres.data.svc.cluster.local"
         - name: DATABASE_PORT
           value: "5432"
         - name: DATABASE_USER
@@ -49,6 +49,10 @@ spec:
             secretKeyRef:
               name: besend-postgres
               key: database
+        - name: SMTP_HOST
+          value: "mailhog.smtp.svc.cluster.local"
+        - name: SMTP_PORT
+          value: "1025"
         - name: API_PORT
           value: "8080"
         livenessProbe:
@@ -70,12 +74,6 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-          runAsNonRoot: true
 ---
 apiVersion: v1
 kind: Service
@@ -89,4 +87,4 @@ spec:
   - name: http
     port: 80
     targetPort: 8080
-  type: LoadBalancer
+  type: ClusterIP
