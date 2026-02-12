@@ -9,11 +9,11 @@ kind: ClusterRole
 metadata:
   name: besend-operator-role
 rules:
-- apiGroups: ["email.besend.io"]
-  resources: ["emailsenderconfigs", "emails"]
+- apiGroups: ["email.example.com"]
+  resources: ["emails", "emailsenderconfigs"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["email.besend.io"]
-  resources: ["emailsenderconfigs/status", "emails/status"]
+- apiGroups: ["email.example.com"]
+  resources: ["emails/status", "emailsenderconfigs/status"]
   verbs: ["get", "update", "patch"]
 - apiGroups: [""]
   resources: ["secrets"]
@@ -21,6 +21,9 @@ rules:
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["create", "patch"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
