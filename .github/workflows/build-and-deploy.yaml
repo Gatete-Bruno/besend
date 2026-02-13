@@ -4,7 +4,14 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., v1.1.0)'
+        required: false
+        type: string
 
 env:
   REGISTRY: docker.io
@@ -12,8 +19,56 @@ env:
   API_IMAGE: bruno74t/besend-api
 
 jobs:
+  version:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build-tag: ${{ steps.version.outputs.build-tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Auto-increment patch version
+            LATEST_TAG=$(git tag -l 'v*' | sort -V | tail -1)
+            if [ -z "$LATEST_TAG" ]; then
+              VERSION="v1.0.0"
+            else
+              # Increment patch version
+              MAJOR=$(echo "$LATEST_TAG" | cut -d. -f1 | sed 's/v//')
+              MINOR=$(echo "$LATEST_TAG" | cut -d. -f2)
+              PATCH=$(echo "$LATEST_TAG" | cut -d. -f3)
+              PATCH=$((PATCH + 1))
+              VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+            fi
+          fi
+          
+          BUILD_TAG="${{ github.sha }}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "build-tag=${BUILD_TAG:0:7}" >> $GITHUB_OUTPUT
+          echo "📦 Version: ${VERSION}"
+          echo "🔖 Build Tag: ${BUILD_TAG:0:7}"
+
+      - name: Create git tag (if not exists)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && github.event_name == 'push' }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git tag "$VERSION" || echo "Tag $VERSION already exists"
+          git push origin "$VERSION" 2>/dev/null || echo "Could not push tag (might already exist)"
+
   build-operator:
     name: Build Operator Image
+    needs: version
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
@@ -36,7 +91,8 @@ jobs:
         with:
           images: ${{ env.OPERATOR_IMAGE }}
           tags: |
-            type=sha,prefix=,format=short
+            type=semver,pattern={{version}},value=${{ needs.version.outputs.version }}
+            type=sha,prefix=${{ needs.version.outputs.build-tag }}-,format=short
             type=raw,value=latest
 
       - name: Build and push operator
@@ -46,11 +102,13 @@ jobs:
           file: ./Dockerfile.operator
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=${{ env.OPERATOR_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.OPERATOR_IMAGE }}:buildcache,mode=max
 
   build-api:
     name: Build API Image
+    needs: version
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
@@ -73,7 +131,8 @@ jobs:
         with:
           images: ${{ env.API_IMAGE }}
           tags: |
-            type=sha,prefix=,format=short
+            type=semver,pattern={{version}},value=${{ needs.version.outputs.version }}
+            type=sha,prefix=${{ needs.version.outputs.build-tag }}-,format=short
             type=raw,value=latest
 
       - name: Build and push API
@@ -83,5 +142,47 @@ jobs:
           file: ./Dockerfile.api
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=${{ env.API_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.API_IMAGE }}:buildcache,mode=max
+
+  create-release:
+    name: Create GitHub Release
+    needs: [version, build-operator, build-api]
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.version.outputs.version }}
+          release_name: Release ${{ needs.version.outputs.version }}
+          body: |
+            ## Release ${{ needs.version.outputs.version }}
+
+            ### Docker Images
+            - **Operator**: `bruno74t/besend-operator:${{ needs.version.outputs.version }}`
+            - **API**: `bruno74t/besend-api:${{ needs.version.outputs.version }}`
+
+            ### Deployment
+            To deploy this version:
+            ```bash
+            kubectl set image deployment/besend-operator besend-operator=bruno74t/besend-operator:${{ needs.version.outputs.version }} -n besend
+            kubectl set image deployment/besend-api besend-api=bruno74t/besend-api:${{ needs.version.outputs.version }} -n besend
+            ```
+
+            ### Rollback
+            To rollback to previous version:
+            ```bash
+            kubectl rollout undo deployment/besend-api -n besend
+            kubectl rollout undo deployment/besend-operator -n besend
+            ```
+
+            Build: ${{ github.sha }}
+          draft: false
+          prerelease: false
