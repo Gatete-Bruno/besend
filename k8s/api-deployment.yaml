@@ -20,12 +20,14 @@ spec:
     metadata:
       labels:
         app: besend-api
+      annotations:
+        version: "v1.0.0"  # Update this when deploying new versions
     spec:
       serviceAccountName: besend-api
       containers:
       - name: api
-        image: bruno74t/besend-api:latest
-        imagePullPolicy: Always
+        image: bruno74t/besend-api:v1.0.0  # Use versioned image (v1.0.0, v1.0.1, etc)
+        imagePullPolicy: IfNotPresent  # Use IfNotPresent for production (avoid pulling latest)
         ports:
         - containerPort: 8080
           name: http
@@ -37,7 +39,10 @@ spec:
         - name: DATABASE_USER
           value: besend
         - name: DATABASE_PASSWORD
-          value: besend123
+          valueFrom:
+            secretKeyRef:
+              name: besend-postgres
+              key: password
         - name: DATABASE_NAME
           value: besend
         - name: SMTP_HOST
@@ -46,6 +51,11 @@ spec:
           value: "1025"
         - name: API_PORT
           value: "8080"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: besend-secrets
+              key: jwt-secret
         resources:
           requests:
             cpu: 100m

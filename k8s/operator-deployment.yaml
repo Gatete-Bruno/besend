@@ -14,12 +14,14 @@ spec:
     metadata:
       labels:
         app: besend-operator
+      annotations:
+        version: "v1.0.0"  # Update this when deploying new versions
     spec:
       serviceAccountName: besend-operator
       containers:
       - name: operator
-        image: bruno74t/besend-operator:latest
-        imagePullPolicy: Always
+        image: bruno74t/besend-operator:v1.0.0  # Use versioned image (v1.0.0, v1.0.1, etc)
+        imagePullPolicy: IfNotPresent  # Use IfNotPresent for production (avoid pulling latest)
         args:
         - --leader-elect
         ports:
