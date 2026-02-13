@@ -31,3 +31,4 @@ config/samples/*.yaml.bak
 # Docker Compose
 docker-compose.yml
 frontend/node_modules/
+node_modules/
