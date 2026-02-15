@@ -18,11 +18,11 @@ type Customer struct {
 }
 
 type APIKey struct {
-	ID         int       `json:"id"`
-	CustomerID int       `json:"customer_id"`
-	KeyHash    string    `json:"-"`
-	Name       string    `json:"name"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         int        `json:"id"`
+	CustomerID int        `json:"customer_id"`
+	KeyHash    string     `json:"-"`
+	Name       string     `json:"name"`
+	CreatedAt  time.Time  `json:"created_at"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 }
 
@@ -102,11 +102,11 @@ func GetCustomerByAPIKey(keyHash string) (*Customer, error) {
 	if stripeID.Valid {
 		customer.StripeCustomerID = stripeID.String
 	}
-	
+
 	if err == nil {
 		DB.Exec(`UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1`, keyHash)
 	}
-	
+
 	return &customer, err
 }
 
@@ -272,4 +272,35 @@ func GetEmailsByCustomer(customerID int, limit, offset int) ([]Email, error) {
 			&email.Subject, &email.Body, &email.Status, &email.CreatedAt,
 			&email.SentAt, &email.ErrorMessage,
 		)
-		if err
+		if err != nil {
+			return nil, err
+		}
+		emails = append(emails, email)
+	}
+	return emails, nil
+}
+
+func GetEmailStats(customerID int) (map[string]int, error) {
+	var total, sent, failed, pending int
+	err := DB.QueryRow(`
+		SELECT 
+			COUNT(*) as total,
+			COUNT(CASE WHEN status = 'sent' THEN 1 END) as sent,
+			COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed,
+			COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending
+		FROM emails
+		WHERE customer_id = $1
+	`, customerID).Scan(&total, &sent, &failed, &pending)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stats := map[string]int{
+		"total":   total,
+		"sent":    sent,
+		"failed":  failed,
+		"pending": pending,
+	}
+	return stats, nil
+}
