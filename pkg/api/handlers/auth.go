@@ -33,7 +33,7 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	customer, err := database.CreateCustomer(req.Email, passwordHash, req.Plan)
+	customer, err := database.CreateCustomer(req.Email, passwordHash)
 	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "Email already registered"})
 		return
