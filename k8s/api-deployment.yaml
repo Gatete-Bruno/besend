@@ -21,34 +21,30 @@ spec:
       labels:
         app: besend-api
       annotations:
-        version: "v1.0.0"  # Update this when deploying new versions
+        version: "v0.2.3"
     spec:
       serviceAccountName: besend-api
       containers:
       - name: api
-        image: bruno74t/besend-api:v1.0.0  # Use versioned image (v1.0.0, v1.0.1, etc)
-        imagePullPolicy: IfNotPresent  # Use IfNotPresent for production (avoid pulling latest)
+        image: bruno74t/besend-api:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
           name: http
         env:
         - name: DATABASE_HOST
-          value: "postgres.data.svc.cluster.local"
+          value: "postgres.besend.svc.cluster.local"
         - name: DATABASE_PORT
           value: "5432"
         - name: DATABASE_USER
-          value: besend
+          value: "besenduser"
         - name: DATABASE_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: besend-postgres
-              key: password
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
         - name: DATABASE_NAME
-          value: besend
-        - name: SMTP_HOST
-          value: "mailhog.smtp.svc.cluster.local"
-        - name: SMTP_PORT
-          value: "1025"
+          value: "besend"
         - name: API_PORT
           value: "8080"
         - name: JWT_SECRET
@@ -63,6 +59,18 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
 ---
 apiVersion: v1
 kind: Service
@@ -76,4 +84,4 @@ spec:
   - name: http
     port: 80
     targetPort: 8080
-  type: ClusterIP
+  type: LoadBalancer
