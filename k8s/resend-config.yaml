@@ -1,0 +1,12 @@
+apiVersion: email.example.com/v1alpha1
+kind: EmailSenderConfig
+metadata:
+  name: resend-sender
+  namespace: besend
+spec:
+  provider: "resend"
+  senderEmail: "onboarding@resend.dev"
+  domain: "resend.dev"
+  port: 443
+  timeout: 30
+  apiTokenSecretRef: "resend-api-key"
