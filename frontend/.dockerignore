@@ -1,0 +1,29 @@
+# ============================================
+# Files to ignore when building Docker image
+# ============================================
+
+# Node dependencies (will be installed in Docker)
+node_modules
+
+# Logs
+npm-debug.log
+npm-error.log
+
+# Git files (not needed in image)
+.git
+.gitignore
+
+# Documentation (not needed in image)
+README.md
+
+# Next.js cache (will be rebuilt)
+.next
+
+# Development files
+.env.local
+.env.*.local
+
+# IDE files
+.vscode
+.idea
+*.swp

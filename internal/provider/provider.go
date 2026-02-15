@@ -40,6 +40,8 @@ func NewProvider(cfg *Config) (Provider, error) {
 	switch cfg.Provider {
 	case "native-smtp":
 		return NewNativeSMTPProvider(cfg)
+	case "resend":
+		return NewResendProvider(cfg)
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", cfg.Provider)
 	}
