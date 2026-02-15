@@ -44,13 +44,22 @@ func InitSchema() error {
 	CREATE TABLE IF NOT EXISTS customers (
 		id SERIAL PRIMARY KEY,
 		email VARCHAR(255) UNIQUE NOT NULL,
-		api_key VARCHAR(64) UNIQUE NOT NULL,
+		password_hash VARCHAR(255) NOT NULL,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		plan VARCHAR(50) DEFAULT 'starter',
 		monthly_quota INTEGER DEFAULT 1000,
 		emails_sent_this_month INTEGER DEFAULT 0,
 		stripe_customer_id VARCHAR(255),
 		active BOOLEAN DEFAULT true
+	);
+
+	CREATE TABLE IF NOT EXISTS api_keys (
+		id SERIAL PRIMARY KEY,
+		customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+		key_hash VARCHAR(64) UNIQUE NOT NULL,
+		name VARCHAR(255),
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		last_used_at TIMESTAMP
 	);
 
 	CREATE TABLE IF NOT EXISTS smtp_configs (
@@ -82,6 +91,8 @@ func InitSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_emails_customer_id ON emails(customer_id);
 	CREATE INDEX IF NOT EXISTS idx_emails_status ON emails(status);
 	CREATE INDEX IF NOT EXISTS idx_smtp_configs_customer_id ON smtp_configs(customer_id);
+	CREATE INDEX IF NOT EXISTS idx_api_keys_customer_id ON api_keys(customer_id);
+	CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
 	`
 
 	_, err := DB.Exec(schema)
