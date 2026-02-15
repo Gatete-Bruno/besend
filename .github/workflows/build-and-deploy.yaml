@@ -61,19 +61,17 @@ jobs:
           echo "Version: ${VERSION}"
           echo "Build Tag: ${BUILD_TAG:0:7}"
 
-      - name: Create git tag (if not exists)
+      - name: Create git tag
         if: ${{ !startsWith(github.ref, 'refs/tags/') && github.event_name == 'push' }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          git tag "$VERSION" || echo "Tag $VERSION already exists"
-          git push origin "$VERSION" 2>/dev/null || echo "Could not push tag (might already exist)"
+          git tag "$VERSION" || echo "Tag exists"
+          git push origin "$VERSION" 2>/dev/null || echo "Could not push tag"
 
   build-operator:
     name: Build Operator Image
     needs: version
     runs-on: ubuntu-latest
-    outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -112,8 +110,6 @@ jobs:
     name: Build API Image
     needs: version
     runs-on: ubuntu-latest
-    outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -163,24 +159,12 @@ jobs:
           tag_name: ${{ needs.version.outputs.version }}
           name: Release ${{ needs.version.outputs.version }}
           body: |
-            ## Release ${{ needs.version.outputs.version }}
-
-            ### Docker Images
-            - **Operator**: `bruno74t/besend-operator:${{ needs.version.outputs.version }}`
-            - **API**: `bruno74t/besend-api:${{ needs.version.outputs.version }}`
-
-            ### Deployment
-```bash
-            kubectl set image deployment/besend-operator besend-operator=bruno74t/besend-operator:${{ needs.version.outputs.version }} -n besend
-            kubectl set image deployment/besend-api besend-api=bruno74t/besend-api:${{ needs.version.outputs.version }} -n besend
-```
-
-            ### Rollback
-```bash
-            kubectl rollout undo deployment/besend-api -n besend
-            kubectl rollout undo deployment/besend-operator -n besend
-```
-
+            Release ${{ needs.version.outputs.version }}
+            
+            Docker Images:
+            - Operator: bruno74t/besend-operator:${{ needs.version.outputs.version }}
+            - API: bruno74t/besend-api:${{ needs.version.outputs.version }}
+            
             Build: ${{ github.sha }}
           draft: false
           prerelease: false
