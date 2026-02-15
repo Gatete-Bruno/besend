@@ -20,7 +20,7 @@ spec:
       serviceAccountName: besend-operator
       containers:
       - name: operator
-        image: bruno74t/besend-operator:v1.0.0  # Use versioned image (v1.0.0, v1.0.1, etc)
+        image: bruno74t/besend-operator:v0.2.1
         imagePullPolicy: IfNotPresent  # Use IfNotPresent for production (avoid pulling latest)
         args:
         - --leader-elect
