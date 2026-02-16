@@ -1,9 +1,9 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
 RUN go mod init smtp-manager && \
-    go get github.com/gin-gonic/gin@latest && \
+    go get github.com/gin-gonic/gin@v1.9.1 && \
     go get github.com/lib/pq@latest && \
     go get golang.org/x/crypto@latest
 
