@@ -21,7 +21,8 @@ env:
   REGISTRY: docker.io
   OPERATOR_IMAGE: bruno74t/besend-operator
   API_IMAGE: bruno74t/besend-api
-  SMTP_IMAGE: bruno74t/besend-smtp
+  SMTP_MANAGER_IMAGE: bruno74t/besend-smtp
+  HARAKA_IMAGE: bruno74t/besend-haraka
 
 jobs:
   version:
@@ -142,6 +143,44 @@ jobs:
           cache-from: type=registry,ref=${{ env.API_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.API_IMAGE }}:buildcache,mode=max
 
+  build-haraka:
+    name: Build Haraka Image
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD_SYMBOLS_ALLOWED }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.HARAKA_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.version.outputs.version }}
+            type=sha,prefix=${{ needs.version.outputs.build-tag }}-,format=short
+            type=raw,value=latest
+
+      - name: Build and push Haraka
+        uses: docker/build-push-action@v5
+        with:
+          context: haraka
+          file: haraka/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.HARAKA_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.HARAKA_IMAGE }}:buildcache,mode=max
+
   build-smtp:
     name: Build SMTP Manager Image
     needs: version
@@ -163,13 +202,13 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.SMTP_IMAGE }}
+          images: ${{ env.SMTP_MANAGER_IMAGE }}
           tags: |
             type=semver,pattern={{version}},value=${{ needs.version.outputs.version }}
             type=sha,prefix=${{ needs.version.outputs.build-tag }}-,format=short
             type=raw,value=latest
 
-      - name: Build and push SMTP
+      - name: Build and push SMTP Manager
         uses: docker/build-push-action@v5
         with:
           context: smtp
@@ -177,12 +216,12 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.SMTP_IMAGE }}:buildcache
-          cache-to: type=registry,ref=${{ env.SMTP_IMAGE }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ env.SMTP_MANAGER_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.SMTP_MANAGER_IMAGE }}:buildcache,mode=max
 
   create-release:
     name: Create GitHub Release
-    needs: [version, build-operator, build-api, build-smtp]
+    needs: [version, build-operator, build-api, build-haraka, build-smtp]
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     steps:
@@ -200,6 +239,7 @@ jobs:
             Docker Images:
             - Operator: bruno74t/besend-operator:${{ needs.version.outputs.version }}
             - API: bruno74t/besend-api:${{ needs.version.outputs.version }}
+            - Haraka SMTP: bruno74t/besend-haraka:${{ needs.version.outputs.version }}
             - SMTP Manager: bruno74t/besend-smtp:${{ needs.version.outputs.version }}
             
             Build: ${{ github.sha }}
