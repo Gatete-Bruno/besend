@@ -16,10 +16,12 @@ pgClient.connect().catch(err => {
 
 const server = new SMTPServer({
   secure: false,
-  auth: {
-    users: [] // We'll validate dynamically
-  },
+  authOptional: true,
   onAuth: async (auth, session, callback) => {
+    if (!auth.username || !auth.password) {
+      return callback(new Error('Username and password required'));
+    }
+
     try {
       const result = await pgClient.query(
         'SELECT id FROM smtp_credentials WHERE username = $1 AND password = crypt($2, password)',
@@ -46,14 +48,15 @@ const server = new SMTPServer({
     stream.on('end', async () => {
       try {
         const messageId = require('crypto').randomUUID();
+        console.log(`Email from ${session.user || 'unknown'}: ${messageId}`);
+        
         await pgClient.query(
           `INSERT INTO email_audit_logs 
-           (id, customer_id, postal_message_id, sender_email, recipient_email, status, created_at) 
-           VALUES ($1, $2, $3, $4, $5, 'delivered', NOW())`,
-          [messageId, session.user, messageId, session.user, session.user]
+           (id, customer_id, postal_message_id, status, created_at) 
+           VALUES ($1, $2, $3, 'delivered', NOW())`,
+          [messageId, session.user || 'unknown', messageId]
         );
         
-        console.log(`Email received from ${session.user}: ${messageId}`);
         callback();
       } catch (err) {
         console.error('Data error:', err);
