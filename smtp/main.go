@@ -148,7 +148,7 @@ func createOrganization(c *gin.Context) {
 }
 
 func listOrganizations(c *gin.Context) {
-	customerID := c.Param("customerID")
+	customerID := c.Param("id")
 
 	rows, err := db.Query(
 		"SELECT id, customer_id, name, created_at FROM organizations WHERE customer_id = $1",
@@ -175,7 +175,7 @@ func listOrganizations(c *gin.Context) {
 }
 
 func addDomain(c *gin.Context) {
-	orgID := c.Param("orgID")
+	orgID := c.Param("id")
 
 	var req struct {
 		Domain string `json:"domain" binding:"required"`
@@ -217,7 +217,7 @@ func addDomain(c *gin.Context) {
 }
 
 func createSMTPCredential(c *gin.Context) {
-	orgID := c.Param("orgID")
+	orgID := c.Param("id")
 
 	var req struct {
 		Description string `json:"description"`
@@ -261,7 +261,7 @@ func createSMTPCredential(c *gin.Context) {
 }
 
 func listCredentials(c *gin.Context) {
-	orgID := c.Param("orgID")
+	orgID := c.Param("id")
 
 	rows, err := db.Query(
 		"SELECT id, organization_id, username, created_at FROM smtp_credentials WHERE organization_id = $1",
@@ -288,7 +288,7 @@ func listCredentials(c *gin.Context) {
 }
 
 func getAuditLogs(c *gin.Context) {
-	customerID := c.Param("customerID")
+	customerID := c.Param("id")
 	limit := c.DefaultQuery("limit", "100")
 	offset := c.DefaultQuery("offset", "0")
 
@@ -361,11 +361,11 @@ func main() {
 
 	router.GET("/health", healthCheck)
 	router.POST("/api/organizations", createOrganization)
-	router.GET("/api/organizations/:customerID", listOrganizations)
-	router.POST("/api/organizations/:orgID/domains", addDomain)
-	router.POST("/api/organizations/:orgID/credentials", createSMTPCredential)
-	router.GET("/api/organizations/:orgID/credentials", listCredentials)
-	router.GET("/api/audit-logs/:customerID", getAuditLogs)
+	router.GET("/api/customers/:id/organizations", listOrganizations)
+	router.POST("/api/organizations/:id/domains", addDomain)
+	router.POST("/api/organizations/:id/credentials", createSMTPCredential)
+	router.GET("/api/organizations/:id/credentials", listCredentials)
+	router.GET("/api/customers/:id/audit-logs", getAuditLogs)
 
 	port := os.Getenv("PORT")
 	if port == "" {
