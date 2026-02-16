@@ -44,7 +44,7 @@ spec:
       serviceAccountName: smtp-manager
       containers:
       - name: smtp-manager
-        image: bruno74t/smtp-manager:0.1.0
+        image: bruno74t/besend-smtp:v4.0.1
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

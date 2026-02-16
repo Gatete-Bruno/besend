@@ -171,7 +171,7 @@ spec:
       serviceAccountName: haraka
       containers:
       - name: haraka
-        image: haraka/haraka:latest
+        image: bruno74t/besend-haraka:v4.0.1
         imagePullPolicy: Always
         ports:
         - containerPort: 25
