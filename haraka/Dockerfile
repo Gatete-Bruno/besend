@@ -2,13 +2,10 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-RUN npm install -g haraka
+RUN npm install smtp-server pg
 
-# Install dependencies for plugins
-RUN npm install pg crypto uuid
+COPY main.js .
 
-# Expose SMTP port
 EXPOSE 25
 
-# Start Haraka
-CMD ["haraka", "-f"]
+CMD ["node", "main.js"]

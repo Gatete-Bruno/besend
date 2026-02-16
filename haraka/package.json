@@ -1,0 +1,10 @@
+{
+  "name": "besend-smtp",
+  "version": "1.0.0",
+  "description": "Besend SMTP Server",
+  "main": "main.js",
+  "dependencies": {
+    "smtp-server": "^3.13.2",
+    "pg": "^8.11.3"
+  }
+}
