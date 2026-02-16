@@ -1,3 +1,6 @@
+cd /Users/bruno/infra/besend
+
+cat > .github/workflows/build-and-deploy.yaml << 'EOF'
 name: Build and Deploy Besend
 
 on:
@@ -175,8 +178,8 @@ jobs:
       - name: Build and push SMTP
         uses: docker/build-push-action@v5
         with:
-          context: ./smtp
-          file: ./smtp/Dockerfile
+          context: smtp
+          file: smtp/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -210,3 +213,4 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+EOF
