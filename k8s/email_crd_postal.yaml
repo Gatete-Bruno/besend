@@ -1,0 +1,123 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: emails.email.besend.io
+spec:
+  group: email.besend.io
+  names:
+    kind: Email
+    plural: emails
+    shortNames:
+    - eml
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            required:
+            - from
+            - to
+            - subject
+            - body
+            - smtpUser
+            - smtpPassword
+            properties:
+              customerId:
+                description: Besend customer ID
+                type: string
+              postalOrgId:
+                description: Postal organization ID
+                type: string
+              from:
+                description: Sender email address
+                type: string
+              to:
+                description: Recipient email address
+                type: string
+              subject:
+                description: Email subject
+                type: string
+                maxLength: 998
+              body:
+                description: Email body
+                type: string
+                maxLength: 10485760
+              bodyHtml:
+                description: Email body HTML
+                type: string
+              replyTo:
+                description: Reply-To email address
+                type: string
+              smtpUser:
+                description: SMTP username
+                type: string
+              smtpPassword:
+                description: SMTP password
+                type: string
+              headers:
+                description: Custom email headers
+                type: object
+                additionalProperties:
+                  type: string
+              metadata:
+                description: Additional metadata
+                type: object
+          status:
+            type: object
+            properties:
+              status:
+                description: Email delivery status
+                type: string
+                enum:
+                - pending
+                - sending
+                - sent
+                - delivered
+                - failed
+                - bounced
+              messageId:
+                description: Message ID
+                type: string
+              error:
+                description: Error message
+                type: string
+              timestamp:
+                description: Processing timestamp
+                type: string
+              deliveredAt:
+                description: Delivery timestamp
+                type: string
+              bounceReason:
+                description: Bounce reason
+                type: string
+            x-kubernetes-preserve-unknown-fields: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Status
+      type: string
+      jsonPath: .status.status
+    - name: From
+      type: string
+      jsonPath: .spec.from
+    - name: To
+      type: string
+      jsonPath: .spec.to
+    - name: Subject
+      type: string
+      jsonPath: .spec.subject
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp

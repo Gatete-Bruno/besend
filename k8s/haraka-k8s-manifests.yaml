@@ -1,0 +1,290 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smtp
+
+---
+# ConfigMap for Haraka configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haraka-config
+  namespace: smtp
+data:
+  config.json: |
+    {
+      "smtp": {
+        "listen": "0.0.0.0:25",
+        "max_connections": 1000,
+        "max_concurrency_per_connection": 10,
+        "timeout": 30
+      },
+      "database": {
+        "host": "postgres.besend.svc.cluster.local",
+        "port": 5432,
+        "name": "besend",
+        "user": "besenduser",
+        "password": "besend_secure_password_123"
+      }
+    }
+  plugins.json: |
+    {
+      "plugins": [
+        "queue/lmtp",
+        "access/relay",
+        "besend_auth",
+        "besend_audit"
+      ]
+    }
+
+---
+# ConfigMap for Haraka plugins
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haraka-plugins
+  namespace: smtp
+data:
+  besend_auth.js: |
+    const pg = require('pg');
+    const pool = new pg.Pool({
+      host: process.env.DB_HOST || 'postgres.besend.svc.cluster.local',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'besend',
+      user: process.env.DB_USER || 'besenduser',
+      password: process.env.DB_PASSWORD || 'besend_secure_password_123',
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
+    });
+    exports.hook_auth = async (next, connection) => {
+      const username = connection.auth_user;
+      const password = connection.auth_passwd;
+      if (!username || !password) {
+        return next(DENYSOFTWARE, 'Username and password required');
+      }
+      try {
+        const result = await pool.query(
+          'SELECT id, customer_id, organization_id FROM smtp_credentials WHERE username = $1 AND password = crypt($2, password)',
+          [username, password]
+        );
+        if (result.rows.length === 0) {
+          return next(DENYSOFTWARE, 'Invalid credentials');
+        }
+        const credential = result.rows[0];
+        connection.besend_customer_id = credential.customer_id;
+        connection.besend_org_id = credential.organization_id;
+        connection.besend_credential_id = credential.id;
+        return next(OK);
+      } catch (error) {
+        console.error('Auth error:', error);
+        return next(DENYSOFT, 'Authentication service error');
+      }
+    };
+
+  besend_audit.js: |
+    const pg = require('pg');
+    const crypto = require('crypto');
+    const pool = new pg.Pool({
+      host: process.env.DB_HOST || 'postgres.besend.svc.cluster.local',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'besend',
+      user: process.env.DB_USER || 'besenduser',
+      password: process.env.DB_PASSWORD || 'besend_secure_password_123',
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
+    });
+    exports.hook_mail = async (next, connection, email) => {
+      const messageId = crypto.randomUUID();
+      connection.besend_message_id = messageId;
+      try {
+        await pool.query(
+          `INSERT INTO email_audit_logs (id, customer_id, postal_message_id, sender_email, status, created_at) VALUES ($1, $2, $3, $4, 'received', NOW())`,
+          [messageId, connection.besend_customer_id, messageId, email.user]
+        );
+      } catch (error) {
+        console.error('Audit log error:', error);
+      }
+      return next();
+    };
+    exports.hook_rcpt = async (next, connection, email) => {
+      try {
+        await pool.query(
+          `UPDATE email_audit_logs SET recipient_email = $1 WHERE id = $2`,
+          [email.user, connection.besend_message_id]
+        );
+      } catch (error) {
+        console.error('Audit update error:', error);
+      }
+      return next();
+    };
+    exports.hook_deliver = async (next, connection) => {
+      try {
+        await pool.query(
+          `UPDATE email_audit_logs SET status = 'delivered', delivered_at = NOW() WHERE id = $1`,
+          [connection.besend_message_id]
+        );
+      } catch (error) {
+        console.error('Delivery update error:', error);
+      }
+      return next();
+    };
+
+---
+# Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: haraka
+  namespace: smtp
+
+---
+# Deployment - Haraka SMTP Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: haraka-smtp
+  namespace: smtp
+  labels:
+    app: haraka
+    component: smtp
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: haraka
+      component: smtp
+  template:
+    metadata:
+      labels:
+        app: haraka
+        component: smtp
+    spec:
+      serviceAccountName: haraka
+      containers:
+      - name: haraka
+        image: haraka/haraka:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 25
+          name: smtp
+          protocol: TCP
+        env:
+        - name: DB_HOST
+          value: "postgres.besend.svc.cluster.local"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "besend"
+        - name: DB_USER
+          value: "besenduser"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: haraka-secrets
+              key: db_password
+        - name: NODE_ENV
+          value: "production"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          tcpSocket:
+            port: 25
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 25
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+        volumeMounts:
+        - name: haraka-config
+          mountPath: /app/config
+          readOnly: true
+        - name: haraka-plugins
+          mountPath: /app/plugins
+          readOnly: true
+      volumes:
+      - name: haraka-config
+        configMap:
+          name: haraka-config
+      - name: haraka-plugins
+        configMap:
+          name: haraka-plugins
+
+---
+# Service - Internal SMTP
+apiVersion: v1
+kind: Service
+metadata:
+  name: haraka-smtp
+  namespace: smtp
+  labels:
+    app: haraka
+    component: smtp
+spec:
+  type: ClusterIP
+  selector:
+    app: haraka
+    component: smtp
+  ports:
+  - port: 25
+    targetPort: 25
+    protocol: TCP
+    name: smtp
+
+---
+# Secret for database credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: haraka-secrets
+  namespace: smtp
+type: Opaque
+stringData:
+  db_password: "besend_secure_password_123"
+
+---
+# HorizontalPodAutoscaler for Haraka
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: haraka-hpa
+  namespace: smtp
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: haraka-smtp
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

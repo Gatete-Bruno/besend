@@ -1,0 +1,163 @@
+---
+# Namespace (shared with Haraka)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smtp
+
+---
+# ConfigMap for SMTP Manager service
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smtp-manager-config
+  namespace: smtp
+data:
+  PORT: "8080"
+  DATABASE_URL: "postgres://besenduser:besend_secure_password_123@postgres.besend.svc.cluster.local:5432/besend?sslmode=disable"
+
+---
+# Deployment - SMTP Manager Go Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smtp-manager
+  namespace: smtp
+  labels:
+    app: smtp-manager
+    component: api
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: smtp-manager
+  template:
+    metadata:
+      labels:
+        app: smtp-manager
+    spec:
+      serviceAccountName: smtp-manager
+      containers:
+      - name: smtp-manager
+        image: bruno74t/smtp-manager:0.1.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: smtp-manager-config
+              key: PORT
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: smtp-manager-config
+              key: DATABASE_URL
+        - name: GIN_MODE
+          value: "release"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+
+---
+# Service - SMTP Manager API
+apiVersion: v1
+kind: Service
+metadata:
+  name: smtp-manager
+  namespace: smtp
+  labels:
+    app: smtp-manager
+spec:
+  type: ClusterIP
+  selector:
+    app: smtp-manager
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: smtp-manager
+  namespace: smtp
+
+---
+# Role for SMTP Manager
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: smtp-manager
+  namespace: smtp
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+
+---
+# RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: smtp-manager
+  namespace: smtp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: smtp-manager
+subjects:
+- kind: ServiceAccount
+  name: smtp-manager
+  namespace: smtp
+
+---
+# Ingress for SMTP Manager API
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: smtp-manager-ingress
+  namespace: smtp
+spec:
+  rules:
+  - host: smtp-manager.besend.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: smtp-manager
+            port:
+              number: 8080

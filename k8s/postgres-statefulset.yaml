@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
-  namespace: data
+  namespace: besend
 spec:
   serviceName: postgres
   replicas: 1
@@ -21,24 +21,19 @@ spec:
         - containerPort: 5432
         env:
         - name: POSTGRES_USER
-          valueFrom:
-            secretKeyRef:
-              name: besend-postgres
-              key: username
+          value: "besenduser"
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: besend-postgres
-              key: password
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
         - name: POSTGRES_DB
-          valueFrom:
-            secretKeyRef:
-              name: besend-postgres
-              key: database
+          value: "besend"
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data
-          subPath: postgres
         resources:
           requests:
             memory: "256Mi"
@@ -54,4 +49,4 @@ spec:
       storageClassName: longhorn
       resources:
         requests:
-          storage: 10Gi
+          storage: 5Gi
