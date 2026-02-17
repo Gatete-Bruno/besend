@@ -26,7 +26,7 @@ spec:
       serviceAccountName: besend-api
       containers:
       - name: api
-        image: bruno74t/besend-api:latest
+        image: bruno74t/besend-api:4.0.7
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
