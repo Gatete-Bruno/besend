@@ -5,17 +5,20 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"time"
 
-	"github.com/Gatete-Bruno/besend/pkg/auth"
 	"github.com/Gatete-Bruno/besend/pkg/database"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 )
+
+var jwtSecret = []byte("your-secret-key-change-in-production")
 
 func Register(c *gin.Context) {
 	var req struct {
 		Email    string `json:"email" binding:"required,email"`
-		Password string `json:"password" binding:"required,min=8"`
-		Plan     string `json:"plan"`
+		Password string `json:"password" binding:"required,min=6"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -23,36 +26,36 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	if req.Plan == "" {
-		req.Plan = "starter"
-	}
-
-	passwordHash, err := auth.HashPassword(req.Password)
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
 		return
 	}
 
-	customer, err := database.CreateCustomer(req.Email, passwordHash)
+	var id int
+	err = database.DB.QueryRow(
+		"INSERT INTO customers (email, password_hash, plan) VALUES ($1, $2, $3) RETURNING id",
+		req.Email, string(hash), "starter",
+	).Scan(&id)
 	if err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "Email already registered"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Email already exists"})
 		return
 	}
 
-	token, err := auth.GenerateToken(customer.ID, customer.Email)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"customer_id": id,
+		"exp":         time.Now().Add(24 * time.Hour).Unix(),
+	})
+
+	tokenString, err := token.SignedString(jwtSecret)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create token"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "Customer registered successfully",
-		"customer": gin.H{
-			"id":    customer.ID,
-			"email": customer.Email,
-			"plan":  customer.Plan,
-		},
-		"token": token,
+		"message": "Registration successful",
+		"token":   tokenString,
 	})
 }
 
@@ -73,25 +76,25 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	if !auth.VerifyPassword(customer.PasswordHash, req.Password) {
+	if err := bcrypt.CompareHashAndPassword([]byte(customer.PasswordHash), []byte(req.Password)); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	token, err := auth.GenerateToken(customer.ID, customer.Email)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"customer_id": customer.ID,
+		"exp":         time.Now().Add(24 * time.Hour).Unix(),
+	})
+
+	tokenString, err := token.SignedString(jwtSecret)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create token"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Login successful",
-		"customer": gin.H{
-			"id":    customer.ID,
-			"email": customer.Email,
-			"plan":  customer.Plan,
-		},
-		"token": token,
+		"token":   tokenString,
 	})
 }
 
@@ -112,8 +115,8 @@ func CreateAPIKey(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate key"})
 		return
 	}
-	keyString := hex.EncodeToString(plainKey)
 
+	keyString := hex.EncodeToString(plainKey)
 	keyHash := sha256.Sum256([]byte(keyString))
 	keyHashStr := hex.EncodeToString(keyHash[:])
 
@@ -144,22 +147,20 @@ func GetAPIKeys(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, keys)
+	c.JSON(http.StatusOK, gin.H{"keys": keys})
 }
 
 func DeleteAPIKey(c *gin.Context) {
-	customer := c.MustGet("customer").(*database.Customer)
-	
 	var req struct {
 		ID int `json:"id" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err := database.DeleteAPIKey(customer.ID, req.ID); err != nil {
+	if err := database.DeleteAPIKey(req.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete API key"})
 		return
 	}
