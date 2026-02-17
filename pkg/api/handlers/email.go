@@ -154,3 +154,50 @@ func DeleteSMTPConfig(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "SMTP config deleted"})
 }
+
+func GetCustomerInfo(c *gin.Context) {
+	customer := c.MustGet("customer").(*database.Customer)
+	c.JSON(http.StatusOK, customer)
+}
+
+func CreateSMTPConfig(c *gin.Context) {
+	customer := c.MustGet("customer").(*database.Customer)
+
+	var req struct {
+		Name      string `json:"name" binding:"required"`
+		SMTPHost  string `json:"smtp_host" binding:"required"`
+		SMTPPort  int    `json:"smtp_port" binding:"required"`
+		Username  string `json:"username"`
+		Password  string `json:"password"`
+		FromEmail string `json:"from_email" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	config, err := database.CreateSMTPConfig(
+		customer.ID, req.Name, req.SMTPHost, req.SMTPPort,
+		req.Username, req.Password, req.FromEmail,
+	)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create SMTP config"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, config)
+}
+
+func GetSMTPConfigs(c *gin.Context) {
+	customer := c.MustGet("customer").(*database.Customer)
+
+	configs, err := database.GetSMTPConfigsByCustomer(customer.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch configs"})
+		return
+	}
+
+	c.JSON(http.StatusOK, configs)
+}

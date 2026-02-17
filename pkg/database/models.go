@@ -1,7 +1,6 @@
 package database
 
 import (
-	"database/sql"
 	"time"
 )
 
@@ -132,4 +131,125 @@ func DeleteSMTPConfig(customerID, configID int) error {
 		WHERE id = $1 AND customer_id = $2
 	`, configID, customerID)
 	return err
+}
+
+func GetCustomerByEmail(email string) (*Customer, error) {
+	var c Customer
+	err := DB.QueryRow(`
+		SELECT id, email, password_hash, created_at, plan, monthly_quota
+		FROM customers
+		WHERE email = $1
+	`, email).Scan(&c.ID, &c.Email, &c.PasswordHash, &c.CreatedAt, &c.Plan, &c.MonthlyQuota)
+	return &c, err
+}
+
+func GetCustomer(id int) (*Customer, error) {
+	var c Customer
+	err := DB.QueryRow(`
+		SELECT id, email, password_hash, created_at, plan, monthly_quota
+		FROM customers
+		WHERE id = $1
+	`, id).Scan(&c.ID, &c.Email, &c.PasswordHash, &c.CreatedAt, &c.Plan, &c.MonthlyQuota)
+	return &c, err
+}
+
+func GetCustomerByAPIKey(keyHash string) (*Customer, error) {
+	var c Customer
+	err := DB.QueryRow(`
+		SELECT c.id, c.email, c.password_hash, c.created_at, c.plan, c.monthly_quota
+		FROM customers c
+		JOIN api_keys ak ON c.id = ak.customer_id
+		WHERE ak.key_hash = $1
+	`, keyHash).Scan(&c.ID, &c.Email, &c.PasswordHash, &c.CreatedAt, &c.Plan, &c.MonthlyQuota)
+	return &c, err
+}
+
+type APIKey struct {
+	ID        int
+	CustomerID int
+	KeyHash   string
+	Name      string
+	CreatedAt time.Time
+}
+
+func CreateAPIKey(customerID int, keyHash, name string) (*APIKey, error) {
+	var ak APIKey
+	err := DB.QueryRow(`
+		INSERT INTO api_keys (customer_id, key_hash, name)
+		VALUES ($1, $2, $3)
+		RETURNING id, customer_id, key_hash, name, created_at
+	`, customerID, keyHash, name).Scan(&ak.ID, &ak.CustomerID, &ak.KeyHash, &ak.Name, &ak.CreatedAt)
+	return &ak, err
+}
+
+func GetAPIKeysByCustomer(customerID int) ([]APIKey, error) {
+	rows, err := DB.Query(`
+		SELECT id, customer_id, name, created_at
+		FROM api_keys
+		WHERE customer_id = $1
+		ORDER BY created_at DESC
+	`, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []APIKey
+	for rows.Next() {
+		var ak APIKey
+		err := rows.Scan(&ak.ID, &ak.CustomerID, &ak.Name, &ak.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, ak)
+	}
+	return keys, nil
+}
+
+func DeleteAPIKey(keyID int) error {
+	_, err := DB.Exec(`
+		DELETE FROM api_keys
+		WHERE id = $1
+	`, keyID)
+	return err
+}
+
+func CreateSMTPConfig(customerID int, name, host string, port int, username, password, fromEmail string) (*SMTPConfig, error) {
+	var config SMTPConfig
+	err := DB.QueryRow(`
+		INSERT INTO smtp_configs (customer_id, name, smtp_host, smtp_port, username, password, from_email)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, customer_id, name, smtp_host, smtp_port, username, password, from_email, created_at
+	`, customerID, name, host, port, username, password, fromEmail).Scan(
+		&config.ID, &config.CustomerID, &config.Name, &config.SMTPHost,
+		&config.SMTPPort, &config.Username, &config.Password, &config.FromEmail, &config.CreatedAt,
+	)
+	return &config, err
+}
+
+func GetSMTPConfigsByCustomer(customerID int) ([]SMTPConfig, error) {
+	rows, err := DB.Query(`
+		SELECT id, customer_id, name, smtp_host, smtp_port, username, password, from_email, created_at
+		FROM smtp_configs
+		WHERE customer_id = $1
+		ORDER BY created_at DESC
+	`, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var configs []SMTPConfig
+	for rows.Next() {
+		var config SMTPConfig
+		err := rows.Scan(
+			&config.ID, &config.CustomerID, &config.Name, &config.SMTPHost,
+			&config.SMTPPort, &config.Username, &config.Password, &config.FromEmail, &config.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		configs = append(configs, config)
+	}
+	return configs, nil
 }
