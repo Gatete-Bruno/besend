@@ -39,8 +39,8 @@ func SendEmail(c *gin.Context) {
 		return
 	}
 
-	host := "54.77.87.98"
-	port := 30587
+	host := "haraka-smtp.smtp.svc.cluster.local"
+	port := 25
 	addr := fmt.Sprintf("%s:%d", host, port)
 
 	conn, err := net.Dial("tcp", addr)
