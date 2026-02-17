@@ -31,7 +31,9 @@ func SendEmail(c *gin.Context) {
 		return
 	}
 
-	email, err := database.CreateEmail(customer.ID, req.SMTPConfigID, req.To, req.Subject, req.Body)
+	// CreateEmail expects *int for smtpConfigID
+	configIDPtr := &req.SMTPConfigID
+	email, err := database.CreateEmail(customer.ID, configIDPtr, req.To, req.Subject, req.Body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create email"})
 		return
