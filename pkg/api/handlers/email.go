@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/smtp"
 	"net/http"
+	"strconv"
 	"github.com/gin-gonic/gin"
 	"github.com/Gatete-Bruno/besend/pkg/database"
 )
@@ -24,8 +25,8 @@ func SendEmail(c *gin.Context) {
 
 	customer := c.MustGet("customer").(*database.Customer)
 
-	smtpConfig, err := database.GetSMTPConfigByID(req.SMTPConfigID)
-	if err != nil || smtpConfig.CustomerID != customer.ID {
+	smtpConfig, err := database.GetSMTPConfigByID(customer.ID, req.SMTPConfigID)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "SMTP config not found"})
 		return
 	}
@@ -115,7 +116,10 @@ func SendEmail(c *gin.Context) {
 func GetEmailHistory(c *gin.Context) {
 	customer := c.MustGet("customer").(*database.Customer)
 	
-	emails, err := database.GetEmailsByCustomer(customer.ID)
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	
+	emails, err := database.GetEmailsByCustomer(customer.ID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch emails"})
 		return
@@ -138,9 +142,9 @@ func GetEmailStats(c *gin.Context) {
 
 func DeleteSMTPConfig(c *gin.Context) {
 	customer := c.MustGet("customer").(*database.Customer)
-	configID := c.Param("id")
+	configID, _ := strconv.Atoi(c.Param("id"))
 	
-	err := database.DeleteSMTPConfig(configID, customer.ID)
+	err := database.DeleteSMTPConfig(customer.ID, configID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete config"})
 		return
