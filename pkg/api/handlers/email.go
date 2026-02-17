@@ -36,7 +36,6 @@ func SendEmail(c *gin.Context) {
 		return
 	}
 
-	// Connect to Haraka via Elastic IP on port 30587
 	host := "54.77.87.98"
 	port := 30587
 	addr := fmt.Sprintf("%s:%d", host, port)
