@@ -13,7 +13,8 @@ pgClient.connect().catch(err => {
 });
 const server = new SMTPServer({
   secure: false,
-  authOptional: true,
+  requireTLS: false,
+  allowInsecureAuth: true,
   onAuth: async (auth, session, callback) => {
     if (!auth.username || !auth.password) {
       return callback(new Error('Username and password required'));
@@ -34,7 +35,6 @@ const server = new SMTPServer({
   },
   onData: async (stream, session, callback) => {
     let email = '';
-    
     stream.on('data', chunk => {
       email += chunk.toString();
     });
@@ -42,14 +42,12 @@ const server = new SMTPServer({
       try {
         const messageId = require('crypto').randomUUID();
         console.log(`Email from ${session.user || 'unknown'}: ${messageId}`);
-        
         await pgClient.query(
           `INSERT INTO email_audit_logs 
            (id, customer_id, postal_message_id, status, created_at) 
            VALUES ($1, $2, $3, 'delivered', NOW())`,
           [messageId, session.user || 'unknown', messageId]
         );
-        
         callback();
       } catch (err) {
         console.error('Data error:', err);
@@ -58,7 +56,6 @@ const server = new SMTPServer({
     });
   }
 });
-
 const port = process.env.SMTP_PORT || 587;
 server.listen(port, '0.0.0.0', () => {
   console.log(`SMTP Server listening on port ${port}`);
